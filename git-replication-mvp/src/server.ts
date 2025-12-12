@@ -1,11 +1,15 @@
 import express, { Request, Response } from 'express';
 import os from 'os';
+import { ReplicationHandler } from './replication-handler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SERVER_ID = process.env.SERVER_ID || 'server-1';
 
 app.use(express.json());
+
+// Initialize replication handler
+const replicationHandler = new ReplicationHandler(SERVER_ID);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -38,8 +42,21 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Replication endpoints
+app.post('/replicate/prepare', (req: Request, res: Response) => {
+  replicationHandler.handlePrepare(req, res);
+});
+
+app.post('/replicate/commit', (req: Request, res: Response) => {
+  replicationHandler.handleCommit(req, res);
+});
+
+app.post('/replicate/abort', (req: Request, res: Response) => {
+  replicationHandler.handleAbort(req, res);
+});
+
 const server = app.listen(PORT, () => {
   console.log(`Server ${SERVER_ID} running on port ${PORT}`);
 });
 
-export { app, server };
+export { app, server, replicationHandler };
