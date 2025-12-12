@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { RepoStorage } from './storage';
 
 interface Transaction {
   transaction_id: string;
@@ -6,6 +7,7 @@ interface Transaction {
   repo_id: string;
   ref: string;
   commit: string;
+  operation: string;
   timestamp: string;
   status: 'prepared' | 'committed' | 'aborted';
 }
@@ -13,13 +15,15 @@ interface Transaction {
 class ReplicationHandler {
   private transactions: Map<string, Transaction> = new Map();
   private serverId: string;
+  private storage: RepoStorage;
 
-  constructor(serverId: string) {
+  constructor(serverId: string, storage: RepoStorage) {
     this.serverId = serverId;
+    this.storage = storage;
   }
 
   async handlePrepare(req: Request, res: Response): Promise<void> {
-    const { transaction_id, coordinator_id, repo_id, ref, commit } = req.body;
+    const { transaction_id, coordinator_id, repo_id, ref, commit, operation } = req.body;
 
     // Validate required fields
     if (!transaction_id || !coordinator_id || !repo_id) {
@@ -29,24 +33,39 @@ class ReplicationHandler {
       return;
     }
 
-    // Store transaction in prepared state
-    const transaction: Transaction = {
-      transaction_id,
-      coordinator_id,
-      repo_id,
-      ref,
-      commit,
-      timestamp: new Date().toISOString(),
-      status: 'prepared'
-    };
+    try {
+      // Perform the actual operation (e.g., create repo)
+      if (operation === 'create') {
+        if (!(await this.storage.repoExists(repo_id))) {
+          await this.storage.createRepo(repo_id);
+        }
+      }
 
-    this.transactions.set(transaction_id, transaction);
+      // Store transaction in prepared state
+      const transaction: Transaction = {
+        transaction_id,
+        coordinator_id,
+        repo_id,
+        ref,
+        commit,
+        operation,
+        timestamp: new Date().toISOString(),
+        status: 'prepared'
+      };
 
-    res.status(200).json({
-      status: 'prepared',
-      transaction_id,
-      server_id: this.serverId
-    });
+      this.transactions.set(transaction_id, transaction);
+
+      res.status(200).json({
+        status: 'prepared',
+        transaction_id,
+        server_id: this.serverId
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        error: 'Prepare failed',
+        details: error.message
+      });
+    }
   }
 
   async handleCommit(req: Request, res: Response): Promise<void> {

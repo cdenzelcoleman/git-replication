@@ -1,15 +1,26 @@
 import express, { Request, Response } from 'express';
 import os from 'os';
 import { ReplicationHandler } from './replication-handler';
+import { GitServer } from './git-server';
+import { RepoStorage } from './storage';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SERVER_ID = process.env.SERVER_ID || 'server-1';
+const DATA_DIR = process.env.DATA_DIR || './data';
+const PEER_URLS = process.env.PEER_URLS?.split(',').filter(Boolean) || [];
 
 app.use(express.json());
 
-// Initialize replication handler
-const replicationHandler = new ReplicationHandler(SERVER_ID);
+// Initialize components
+const storage = new RepoStorage(DATA_DIR);
+const replicationHandler = new ReplicationHandler(SERVER_ID, storage);
+const gitServer = new GitServer(DATA_DIR, SERVER_ID, PEER_URLS);
+
+// Initialize storage
+gitServer.initialize().then(() => {
+  console.log(`Storage initialized at ${DATA_DIR}`);
+});
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -38,8 +49,22 @@ app.get('/health', (req: Request, res: Response) => {
     load: {
       cpu: parseFloat(cpuUsage.toFixed(2)),
       memory: parseFloat(memoryUsage.toFixed(2))
-    }
+    },
+    peers: PEER_URLS.length
   });
+});
+
+// Git repository endpoints
+app.post('/repos', (req: Request, res: Response) => {
+  gitServer.handleCreateRepo(req, res);
+});
+
+app.get('/repos/:user/:repo', (req: Request, res: Response) => {
+  gitServer.handleGetRepo(req, res);
+});
+
+app.get('/repos', (req: Request, res: Response) => {
+  gitServer.handleListRepos(req, res);
 });
 
 // Replication endpoints
@@ -57,6 +82,8 @@ app.post('/replicate/abort', (req: Request, res: Response) => {
 
 const server = app.listen(PORT, () => {
   console.log(`Server ${SERVER_ID} running on port ${PORT}`);
+  console.log(`Data directory: ${DATA_DIR}`);
+  console.log(`Connected to ${PEER_URLS.length} peer(s)`);
 });
 
-export { app, server, replicationHandler };
+export { app, server, replicationHandler, gitServer };

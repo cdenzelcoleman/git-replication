@@ -23,7 +23,8 @@ describe('Health Check', () => {
       status: 'healthy',
       server_id: expect.any(String),
       timestamp: expect.any(String),
-      load: expect.any(Object)
+      load: expect.any(Object),
+      peers: expect.any(Number)
     });
   });
 
